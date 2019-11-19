@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="
+	http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+	http://camel.apache.org/schema/spring http://camel.apache.org/schema/spring/camel-spring.xsd
+	">
+    
+    <camelContext id="teddy-cast" xmlns="http://camel.apache.org/schema/spring">
+
+		<rest id="restsvc" path="/restsvc" bindingMode="off" produces="application/json">
+			<get id="getPing" uri="/ping">
+				<route id="getPingRoute">
+					<setBody>
+						<constant>{"msg" : "ok"}</constant>
+					</setBody>
+				</route>
+			</get>
+			<post id="postCommand" uri="/command">
+				<param name="command" type="body" required="true"/>
+				<route id="postCommandRoute">
+					<convertBodyTo type="java.lang.String"/>
+					<to uri="seda:route-command?blockWhenFull=false"/>
+				</route>
+			</post>
+			<get id="getPause" uri="/pause">
+				<to uri="direct:pause"/>
+			</get>
+			<get id="getStop" uri="/stop">
+				<to uri="direct:stop"/>
+			</get>
+			<get id="getForward10" uri="/forward10">
+				<to uri="direct:forward10"/>
+			</get>
+			<get id="getBack10" uri="/back10">
+				<to uri="direct:back10"/>
+			</get>
+		</rest>
+
+
+        <route id="http-receiver">
+            <from id="http-receiver-starter" uri="servlet://ping" />
+            <setHeader headerName="Content-Type">
+                <constant>application/json</constant>
+            </setHeader>
+            <setBody>
+                <constant>{"msg" : "HELLO"}</constant>
+            </setBody>
+        </route>
+
+        <route id="raspberry-teddy-command-route">
+            <from id="raspberry-teddy-command-route-starter" uri="telegram:bots/{{tgtoken}}" />
+            <log id="log-headers" message="${headers}" />
+            <log id="log-body" message="${body} ${body.class}" />
+            <convertBodyTo type="java.lang.String" />
+            <to uri="seda:route-command?blockWhenFull=false"/>
+        </route>
+
+        <route>
+            <from uri="seda:route-command?concurrentConsumers=10"/>
+            <choice>
+                    <!-- Player commands -->
+                    <when>
+                        <simple>${body} == '/stop'</simple>
+                        <to uri="direct:stop" />
+                    </when>
+                    <when>
+                        <simple>${body} == '/pause'</simple>
+                        <to uri="direct:pause" />
+                    </when>
+                    <when>
+						<simple>${body} == '/back10'</simple>
+						<to uri="direct:back10"/>
+                    </when>
+                    <when>
+						<simple>${body} == '/forward10'</simple>
+						<to uri="direct:forward10"/>
+                    </when>
+                    <when>
+                        <simple>${body} == '/help'</simple>
+                        <to uri="direct:help" />
+                        <log message="help" />
+                    </when>
+    
+                    <when>
+                        <simple>${body} contains 'youtu'</simple>
+                        <to uri="direct:youtube" />
+                    </when>
+    
+                    <when>
+                        <simple>
+                            ${body} contains '.avi' || 
+                            ${body} contains '.mkv' ||
+                            ${body} contains '.mp4' ||
+                            ${body} contains '.mp3' ||
+                            ${body} contains '.m4a' ||
+                            ${body} contains '.AVI' || 
+                            ${body} contains '.MKV' ||
+                            ${body} contains '.MP4' ||
+                            ${body} contains '.MP3' ||
+                            ${body} contains '.M4A'
+                        </simple>
+                        <to uri="direct:play" />
+                    </when>
+    
+                    <otherwise>
+                        <to uri="direct:help" />
+                        <log message="default route" />
+                    </otherwise>
+                </choice>
+        </route>
+
+		<route id="forward10">
+			<from uri="direct:forward10"/>
+			<setHeader headerName="CamelExecCommandArgs">
+				<simple>seek 10000000</simple>
+			</setHeader>
+			<to uri="exec:/usr/bin/dbuscontrol" />
+		</route>
+		<route id="back10">
+			<from uri="direct:back10"/>
+			<setHeader headerName="CamelExecCommandArgs">
+				<simple>seek -10000000</simple>
+			</setHeader>
+			<to uri="exec:/usr/bin/dbuscontrol" />
+		</route>
+        <!-- Player commands -->
+        <route id="stop">
+            <from uri="direct:stop" />
+            <setHeader headerName="CamelExecCommandArgs">
+                <simple>omxplayer.bin</simple>
+            </setHeader>
+            <to uri="exec:killall" />
+            <log message="stop" />
+        </route>
+
+        <route id="pause">
+            <from uri="direct:pause" />
+            <setHeader headerName="CamelExecCommandArgs">
+                <simple>pause</simple>
+            </setHeader>
+            <to uri="exec:/usr/bin/dbuscontrol" />
+            <log message="pause" />
+        </route>
+
+        <route id="play">
+            <from uri="direct:play" />
+            <setProperty propertyName="playurl">
+                    <simple>${body}</simple>
+                </setProperty>
+            <!--stop current video-->
+            <to uri="direct:stop" />
+            <setHeader headerName="CamelExecCommandArgs">
+                <simple>-b -o hdmi ${property.playurl}</simple>
+            </setHeader>
+            <to uri="exec:/usr/bin/omxplayer" />
+            <log message="${headers}"/>
+        </route>
+
+        <!-- Specific parsing -->
+        <route id="youtube">
+            <from uri="direct:youtube" />
+            <setHeader headerName="CamelExecCommandArgs">
+                <simple>-g -f best ${body}</simple>
+            </setHeader>
+            <to uri="exec:/usr/local/bin/youtube-dl" />
+            <to uri="direct:play" />
+        </route>
+
+        <route id="help">
+            <from uri="direct:help" />
+            <setBody>
+                <simple>
+                    /help : Show help menu \n
+                </simple>
+            </setBody>
+            <to uri="language:simple:${body}/stop : Stop current playback\n" />
+            <to uri="language:simple:${body}/pause : Pause current playback\n"></to>
+            <to uri="language:simple:${body}/back10 : Seek back 10 sec\n"></to>
+			<to uri="language:simple:${body}/forward10 : Seek forward 10 sec\n"></to>
+			<choice>
+				<when>
+					<simple>${header.CamelTelegramChatId} != null</simple>
+					<to uri="telegram:bots/{{tgtoken}}" />
+				</when>
+			</choice>
+        </route>
+	</camelContext>
+</beans>
