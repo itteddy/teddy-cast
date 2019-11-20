@@ -13,6 +13,9 @@ import org.apache.camel.cdi.ContextName;
 import org.apache.camel.cdi.ImportResource;
 import org.apache.camel.component.jms.JmsComponent;
 import org.apache.camel.component.telegram.TelegramComponent;
+import org.apache.camel.processor.aggregate.AbstractListAggregationStrategy;
+import org.apache.camel.processor.aggregate.AggregationStrategy;
+import org.apache.camel.processor.aggregate.GroupedBodyAggregationStrategy;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.jta.JtaTransactionManager;
 
@@ -24,5 +27,9 @@ public class Application{
     @ContextName("teddy-cast")
     CamelContext context;
 
-
+    @Produces
+    @Named(value = "groupedBodyAggregationStrategy")
+    AggregationStrategy groupedBodyAggregationStrategy(){
+        return new GroupedBodyAggregationStrategy();
+    }
 }
