@@ -1,0 +1,18 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+    <title>teddy-cast</title>
+</head>
+
+<body>
+   <h1>Saved Youtube Videos</h1>
+   #foreach( ${video} in ${body} )
+        <p>
+           <a href="/teddy-cast/camel/restsvc/playyt/${video}">${video}.mp4 <br>
+            <img alt="${video}" src="/teddy-cast/camel/restsvc/thumbyt/${video}" height="250px">
+            </a>
+        </p>
+   #end
+</body>
+
+</html>

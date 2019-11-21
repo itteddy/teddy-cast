@@ -21,6 +21,14 @@
                     <to uri="seda:route-command?blockWhenFull=false" />
                 </route>
             </post>
+            <get id="getPlayyt" uri="/playyt/{ytid}">
+                <route>
+                    <setBody>
+                        <simple>{{env:HOME}}/media/ytube/${header.ytid}.mp4</simple>
+                    </setBody>
+                    <inOnly uri="seda:route-command"/>
+                </route>
+            </get>
             <get id="getPause" uri="/pause">
                 <to uri="direct:pause" />
             </get>
@@ -33,8 +41,31 @@
             <get id="getBack10" uri="/back10">
                 <to uri="direct:back10" />
             </get>
+            <get id="thumb" uri="/thumbyt/{id}" produces="image/jpeg">
+                <route>
+                    <bean ref="fileUtils" method="load({{env:HOME}}/media/ytube/${header.id}.jpg)" />
+                    <setHeader headerName="Content-Type">
+                        <constant>image/jpeg</constant>
+                    </setHeader>
+                </route>
+            </get>
         </rest>
 
+        <route id="page">
+            <from uri="servlet://ytlist" />
+            <setHeader headerName="CamelExecCommandArgs">
+                <constant>-c "ls *.mp4"</constant>
+            </setHeader>
+            <to uri="exec:/bin/sh?workingDir={{env:HOME}}/media/ytube" />
+            <split strategyRef="groupedBodyAggregationStrategy">
+                <tokenize token="\n" />
+                <setBody>
+                    <simple>${body.split('\.')[0]}</simple>
+                </setBody>
+                <log message="${body}"/>
+            </split>
+            <to uri="velocity:list.html" />
+        </route>
 
         <route id="http-receiver">
             <from id="http-receiver-starter" uri="servlet://ping" />
@@ -151,12 +182,13 @@
             <setHeader headerName="CamelExecCommandArgs">
                 <simple>-b -o hdmi "${property.playurl}"</simple>
             </setHeader>
+            <!-- <to uri="exec:/usr/bin/omxplayer" /> -->
             <to uri="exec:/usr/bin/omxplayer" />
             <log message="${headers}" />
         </route>
 
         <!-- Specific parsing -->
-        <route id="youtube">
+        <route id="youtubeplay">
             <from uri="direct:youtubeplay" />
             <setHeader headerName="CamelExecCommandArgs">
                 <simple>-g -f best ${body}</simple>
@@ -165,48 +197,52 @@
             <to uri="direct:play" />
         </route>
 
-        <route>
+        <route id="youtube">
             <from uri="direct:youtube" />
             <setProperty propertyName="playurl">
                 <simple>${body}</simple>
             </setProperty>
-            <setHeader headerName="CamelExecCommandArgs">
-                <simple>--get-filename --get-thumbnail -f bestvideo[ext=mp4]+bestaudio[ext=m4a]/mp4 ${body}</simple>
+
+            <setHeader headerName="ytId">
+                <method bean="parseYTId" method="parse(${body})" />
             </setHeader>
-            <to uri="exec:/usr/local/bin/youtube-dl" />
-            <split strategyRef="groupedBodyAggregationStrategy">
-                <tokenize token="\n" />
-                <log message="${body.class} ${body}"></log>
-            </split>
-            <log message="${body.class} ${body[1]} ${header.fileExists}"></log>
+
+            <log message="##########################" />
+            <log message="You asked for : ${header.ytId}" />
+            <log message="##########################" />
             <choice>
                 <when>
-                    <method bean="fileExists" method="fileExists({{env:HOME}}/media/${body[1]})" />
+                    <method bean="fileUtils" method="fileExists({{env:HOME}}/media/ytube/${header.ytId}.mp4)" />
                     <log message="File already exists starting to play..."></log>
                     <setBody>
-                        <simple>{{env:HOME}}/media/${body[1]}</simple>
+                        <simple>{{env:HOME}}/media/ytube/${header.ytId}.mp4</simple>
                     </setBody>
                     <log message="${body}"></log>
-                    <to uri="direct:play"/>
+                    <to uri="direct:play" />
                 </when>
                 <otherwise>
-                    <log message="File does not exists playing live and downloading in background..."/>
+                    <log message="File does not exists playing live and downloading in background..." />
                     <setBody>
-                            <simple>${property.playurl}</simple>
+                        <simple>${property.playurl}</simple>
                     </setBody>
-                    <inOnly uri="seda:downloadyt"/>
-                    <to uri="direct:youtube"/>
+                    <inOnly uri="seda:downloadyt" />
+                    <to uri="direct:youtubeplay" />
                 </otherwise>
             </choice>
+
         </route>
 
         <route id="downloadyt">
-            <from uri="seda:downloadyt?concurrentConsumers=1"/>
+            <from uri="seda:downloadyt?concurrentConsumers=1" />
             <setHeader headerName="CamelExecCommandArgs">
-                    <simple>--write-thumbnail -f bestvideo[ext=mp4]+bestaudio[ext=m4a]/mp4 ${body}</simple>
-                </setHeader>
-                <to uri="exec:/usr/local/bin/youtube-dl?workingDir={{env:HOME}}/media" />
-            <log message="${body}"/>
+                <simple>--write-thumbnail -f bestvideo[ext=mp4]+bestaudio[ext=m4a]/mp4 ${body} -o "%(id)s.%(ext)s"</simple>
+            </setHeader>
+            <to uri="exec:/usr/local/bin/youtube-dl?workingDir={{env:HOME}}/media" />
+            <setHeader headerName="CamelExecCommandArgs">
+                <simple>${header.ytId}.* ./youtube/</simple>
+            </setHeader>
+            <to uri="exec:mv?workingDir={{env:HOME}}/media" />
+            <log message="${body}" />
         </route>
 
         <route id="help">
