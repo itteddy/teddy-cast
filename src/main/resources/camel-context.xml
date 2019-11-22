@@ -239,9 +239,9 @@
             </setHeader>
             <to uri="exec:/usr/local/bin/youtube-dl?workingDir={{env:HOME}}/media" />
             <setHeader headerName="CamelExecCommandArgs">
-                <simple>${header.ytId}.* ./youtube/</simple>
+                <simple>-c "mv ${header.ytId}.* ./youtube/"</simple>
             </setHeader>
-            <to uri="exec:mv?workingDir={{env:HOME}}/media" />
+            <to uri="exec:/bin/sh?workingDir={{env:HOME}}/media" />
             <log message="${body}" />
         </route>
 
