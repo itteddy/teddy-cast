@@ -186,26 +186,6 @@
                     <serverConfig>${server.config}</serverConfig>
                 </configuration>
             </plugin>
-            <plugin>
-                <groupId>org.apache.camel</groupId>
-                <artifactId>camel-maven-plugin</artifactId>
-                <version>${camel.version}</version>
-                <configuration>
-                    <useCDI>true</useCDI>
-                </configuration>
-                <dependencies>
-                  <dependency>
-                    <groupId>org.apache.deltaspike.cdictrl</groupId>
-                    <artifactId>deltaspike-cdictrl-weld</artifactId>
-                    <version>1.9.1</version>
-                  </dependency>
-                  <dependency>
-                    <groupId>org.jboss.weld.se</groupId>
-                    <artifactId>weld-se</artifactId>
-                    <version>2.4.8.Final</version>
-                  </dependency>
-                </dependencies>
-              </plugin>
         </plugins>
     </build>
     <!-- Profiles -->
